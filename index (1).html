@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>건축 법규·조례 검토 도우미</title>
+<style>
+  :root { --navy:#17324d; --blue:#2563eb; --line:#d8e0e8; --bg:#f5f7fa; --text:#1f2937; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:Arial,"Noto Sans KR",sans-serif; }
+  .wrap { max-width:1000px; margin:0 auto; padding:24px 16px 60px; }
+  h1 { color:var(--navy); margin:0 0 8px; font-size:28px; }
+  h2 { color:var(--navy); margin:0 0 14px; font-size:20px; }
+  .sub { color:#64748b; margin-bottom:22px; line-height:1.6; }
+  .card { background:#fff; border:1px solid var(--line); padding:20px; margin:14px 0; box-shadow:0 3px 12px #17324d0d; }
+  label { display:block; font-weight:700; margin:14px 0 7px; }
+  input, textarea, select { width:100%; border:1px solid #bdc9d6; padding:11px 12px; font-size:15px; border-radius:6px; }
+  textarea { min-height:100px; resize:vertical; line-height:1.5; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  button { border:0; border-radius:6px; padding:11px 15px; cursor:pointer; font-weight:700; background:var(--blue); color:#fff; margin:8px 6px 0 0; }
+  button.secondary { background:#475569; }
+  button.light { background:#e8eef6; color:#17324d; }
+  button:disabled { opacity:.55; cursor:not-allowed; }
+  .notice { background:#fff7ed; border-left:4px solid #f59e0b; padding:12px; line-height:1.6; font-size:13px; }
+  .status { color:#2563eb; white-space:pre-wrap; margin-top:12px; }
+  .result { white-space:pre-wrap; background:#fbfdff; border:1px solid var(--line); padding:16px; min-height:180px; line-height:1.7; overflow:auto; }
+  .chat { margin-top:14px; }
+  .msg { padding:12px; margin:8px 0; white-space:pre-wrap; line-height:1.6; }
+  .user { background:#eef4ff; border-left:4px solid #60a5fa; }
+  .ai { background:#f8fafc; border-left:4px solid #94a3b8; }
+  .small { font-size:12px; color:#64748b; line-height:1.5; }
+  @media(max-width:700px){ .grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>건축 법규·조례 검토 도우미</h1>
+  <div class="sub">개인용 초기 검토 도구 · 건축 / 소방 / 전기 / 조경 / 주차 / 지자체 조례</div>
+
+  <div class="card">
+    <h2>1. Gemini API 설정</h2>
+    <label for="apiKey">Gemini API 키</label>
+    <input id="apiKey" type="password" autocomplete="off" placeholder="AIza...">
+    <label for="model">사용 모델</label>
+    <input id="model" value="gemini-3.6-flash">
+    <div class="small">API 키는 이 페이지의 입력란에만 저장되며, 코드나 메모 파일에 저장하지 않습니다. 공개 서비스로 운영할 경우에는 서버를 사용하세요.</div>
+  </div>
+
+  <div class="card">
+    <h2>2. 프로젝트 정보</h2>
+    <div class="grid">
+      <div>
+        <label for="address">대지 주소 / 관할 지자체</label>
+        <input id="address" placeholder="예: 서울특별시 ○○구 ○○동">
+      </div>
+      <div>
+        <label for="use">건축물 용도</label>
+        <input id="use" placeholder="예: 근린생활시설, 주거, 사무소">
+      </div>
+      <div>
+        <label for="work">설계 범위</label>
+        <input id="work" placeholder="예: 인테리어, 대수선, 증축, 계획설계">
+      </div>
+      <div>
+        <label for="scale">규모 / 주요 수치</label>
+        <input id="scale" placeholder="예: 지하 1층~지상 4층, 연면적 1,200㎡">
+      </div>
+    </div>
+    <label for="details">대지·건물 상세 조건</label>
+    <textarea id="details" placeholder="용도지역, 건폐율·용적률, 기존 구조, 주차, 도로 접면, 높이, 피난, 장애인시설 등 알고 있는 내용을 입력하세요."></textarea>
+    <button id="reviewBtn" onclick="runReview()">통합 법규·조례 검토</button>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>3. 1차 검토 결과</h2>
+    <div id="result" class="result">아직 검토 결과가 없습니다.</div>
+    <button class="secondary" onclick="copyText('result')">결과 복사</button>
+    <button class="light" onclick="downloadMemo()">최종 메모장 저장</button>
+  </div>
+
+  <div class="card">
+    <h2>4. 추가 질문</h2>
+    <textarea id="question" placeholder="예: 주차대수 산정 근거와 서울시 조례 확인사항만 자세히 설명해줘."></textarea>
+    <button id="askBtn" onclick="askFollowUp()">추가 질문 보내기</button>
+    <div id="chat" class="chat"></div>
+  </div>
+
+  <div class="notice">
+    주의: 이 도구는 설계 초기 검토를 위한 참고용입니다. AI 답변은 법적 확정 판단이 아니며,
+    국가법령정보센터·관할 지자체 자치법규·담당 부서 협의로 최종 확인해야 합니다.
+    조례와 법령은 개정될 수 있으므로 검토 기준일을 기록하세요.
+  </div>
+</div>
+
+<script>
+const state = { project:"", initial:"", messages:[] };
+
+function val(id){ return document.getElementById(id).value.trim(); }
+function setStatus(t){ document.getElementById("status").textContent = t || ""; }
+
+function projectText(){
+  return [
+    "대지 주소/관할: " + val("address"),
+    "건축물 용도: " + val("use"),
+    "설계 범위: " + val("work"),
+    "규모/주요 수치: " + val("scale"),
+    "상세 조건: " + val("details")
+  ].join("\n");
+}
+
+async function callGemini(prompt){
+  const key = val("apiKey");
+  const model = val("model") || "gemini-3.6-flash";
+  if(!key) throw new Error("Gemini API 키를 입력해 주세요.");
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/" +
+              encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(key);
+  const res = await fetch(url, {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      contents:[{role:"user", parts:[{text:prompt}]}],
+      generationConfig:{temperature:0.2, maxOutputTokens:5000}
+    })
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error(data?.error?.message || ("API 오류 " + res.status));
+  const text = data?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("") || "";
+  if(!text) throw new Error("AI 응답이 비어 있습니다. 모델명과 API 키 권한을 확인해 주세요.");
+  return text;
+}
+
+async function runReview(){
+  const btn = document.getElementById("reviewBtn");
+  const p = projectText();
+  if(!val("address") && !val("details")) { alert("대지 주소 또는 상세 조건을 입력해 주세요."); return; }
+  state.project = p; state.messages = [];
+  btn.disabled = true; setStatus("법령·시행령·시행규칙·지자체 조례 검토 중...");
+  const prompt = `당신은 대한민국 건축 설계 초기검토를 돕는 신중한 AI입니다.
+아래 프로젝트를 대상으로 건축, 소방, 전기, 조경, 주차, 장애인 편의시설, 피난·방재, 에너지·환경 및 관할 지자체 조례를 검토하세요.
+
+[프로젝트 정보]
+${p}
+
+반드시 다음 형식으로 작성하세요.
+1. 핵심 결론
+2. 우선 확인할 위험·누락 사항
+3. 건축법 및 하위법령 검토
+4. 관할 지자체 조례 검토
+   - 건축조례
+   - 주차장 조례
+   - 도시계획/용도지역 관련 조례
+   - 조경·공개공지·옥외광고·하수도 등 해당 가능 조례
+5. 소방·전기·조경·장애인·주차 분야별 확인사항
+6. 관할 기관 및 협의 필요사항
+7. 추가로 필요한 도면·서류·수치
+8. 체크리스트 표
+
+각 항목마다 가능하면 법령명·조문·별표를 적되, 확인하지 못한 조문은 지어내지 말고 '공식 확인 필요'라고 표시하세요.
+주소만으로 용도지역이나 조례 적용을 확정하지 말고 조건부로 표현하세요.
+검토 기준일: ${new Date().toLocaleDateString("ko-KR")}
+이 내용은 법률·인허가 확정 판단이 아닌 초기 설계 검토용임을 밝혀 주세요.`;
+  try{
+    const answer = await callGemini(prompt);
+    state.initial = answer;
+    document.getElementById("result").textContent = answer;
+    setStatus("검토가 완료되었습니다.");
+  }catch(e){ setStatus("오류: " + e.message); }
+  finally{ btn.disabled = false; }
+}
+
+async function askFollowUp(){
+  if(!state.initial){ alert("먼저 1차 검토를 실행해 주세요."); return; }
+  const q = val("question"); if(!q){ alert("추가 질문을 입력해 주세요."); return; }
+  const btn = document.getElementById("askBtn"); btn.disabled = true;
+  const prompt = `당신은 대한민국 건축 인허가 초기검토 보조 AI입니다.
+[프로젝트]
+${state.project}
+[기존 검토 결과]
+${state.initial}
+[이전 대화]
+${state.messages.join("\n")}
+[추가 질문]
+${q}
+
+기존 결과와 프로젝트 조건을 연결해 답변하세요. 관련 국가법령과 관할 지자체 조례를 구분하고,
+조문을 확실히 확인하지 못한 경우 추정하지 말고 '공식 확인 필요'라고 표시하세요.
+답변 형식: 결론 / 근거 / 프로젝트 적용 / 추가 확인사항 / 협의 기관.
+법률·인허가 확정 판단이 아니라는 점도 짧게 표시하세요.`;
+  try{
+    const a = await callGemini(prompt);
+    state.messages.push("사용자: " + q, "AI: " + a);
+    const chat = document.getElementById("chat");
+    chat.innerHTML += '<div class="msg user"></div><div class="msg ai"></div>';
+    chat.children[chat.children.length-2].textContent = "사용자: " + q;
+    chat.children[chat.children.length-1].textContent = "AI: " + a;
+    document.getElementById("question").value = "";
+  }catch(e){ setStatus("오류: " + e.message); }
+  finally{ btn.disabled = false; }
+}
+
+function copyText(id){
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard?.writeText(text).then(()=>alert("복사했습니다.")).catch(()=>alert("복사에 실패했습니다."));
+}
+function fullMemo(){
+  return `건축 법규·조례 초기검토 메모
+검토일: ${new Date().toLocaleString("ko-KR")}
+
+[프로젝트]
+${state.project}
+
+[1차 검토 결과]
+${state.initial || "없음"}
+
+[추가 질문·답변]
+${state.messages.join("\n\n") || "없음"}
+
+※ 본 메모는 설계 초기 참고자료이며 최종 법령·조례·협의 확인이 필요합니다.`;
+}
+function downloadMemo(){
+  const blob = new Blob([fullMemo()], {type:"text/plain;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "건축법규조례검토메모.txt";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>
