@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>건축 인허가 법규 AI 메모</title>
+<style>
+:root{--blue:#2563eb;--navy:#0f172a;--bg:#f8fafc;--line:#dbe3ef;--muted:#64748b}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:#1e293b;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.container{max-width:920px;margin:0 auto;padding:24px}.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:18px;box-shadow:0 5px 18px #0f172a0b}
+h1,h2{margin-top:0;color:var(--navy)} h1{font-size:1.55rem}.muted{color:var(--muted);font-size:.92rem;line-height:1.6}
+label{display:block;font-weight:700;margin:12px 0 7px} input,textarea,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font:inherit} textarea{min-height:100px;resize:vertical}
+.site{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:14px;margin:12px 0}.site-head{display:flex;justify-content:space-between;align-items:center;font-weight:700;color:var(--blue)}
+button{border:0;border-radius:8px;padding:11px 15px;background:var(--blue);color:#fff;font-weight:700;cursor:pointer;margin:6px 6px 0 0}button.secondary{background:#475569}button.green{background:#059669}button.red{background:#dc2626;padding:7px 10px;font-size:.85rem}
+button:disabled{opacity:.55;cursor:wait}.row{display:flex;gap:8px;flex-wrap:wrap}.result{white-space:pre-wrap;line-height:1.75;background:#f1f5f9;border-radius:10px;padding:18px;min-height:140px;margin-top:14px;overflow-wrap:anywhere}.chat-item{border-top:1px solid var(--line);padding:14px 0}.q{font-weight:700;color:#1d4ed8}.a{white-space:pre-wrap;line-height:1.7;margin-top:6px}
+.notice{border-left:4px solid #f59e0b;background:#fffbeb;padding:12px 14px;line-height:1.6;font-size:.9rem}
+@media(max-width:600px){.container{padding:14px}.card{padding:16px}}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="card">
+<h1>🏢 건축 인허가 법규 AI 메모</h1>
+<p class="muted">건축법·시행령·소방·전기·조경과 함께 해당 지자체 조례를 검토하고, 결과를 대화형으로 보완합니다.</p>
+<div class="notice">이 도구는 설계 초기 검토용입니다. 법령·조례·용도지역·담당 부서 정보는 반드시 국가법령정보센터, 자치법규정보시스템, 토지이음 및 관할 행정기관에서 최종 확인하세요.</div>
+<label for="apiKey">Gemini API 키 <span class="muted">(이 브라우저에서만 사용되며 저장하지 않습니다)</span></label>
+<input id="apiKey" type="password" autocomplete="off" placeholder="AIza...">
+<label for="usage">계획 건물 용도 및 규모</label>
+<input id="usage" value="1층: 근린생활시설, 2~3층: 업무시설 / 지상 3층">
+<label for="region">검토 관할 지자체(알고 있다면 입력)</label>
+<input id="region" placeholder="예: 대구광역시 북구">
+<div id="sites"></div>
+<div class="row"><button class="green" onclick="addSite()">📍 대지 추가</button><button onclick="review()">통합 검토 실행</button></div>
+<div id="result" class="result">검토 결과가 여기에 표시됩니다.</div>
+<div class="row"><button class="secondary" onclick="copyMemo()">📋 최종 메모 복사</button><button class="secondary" onclick="downloadMemo()">⬇️ .txt 메모 저장</button><button class="secondary" onclick="clearAll()">초기화</button></div>
+</div>
+
+<div class="card" id="chatCard" style="display:none">
+<h2>💬 추가 질의응답</h2>
+<p class="muted">초기 검토 결과와 대화 이력을 참고해 질문합니다.</p>
+<textarea id="question" placeholder="예: 주차대수 산정 근거와 해당 구청 조례 조문을 구분해서 설명해줘"></textarea>
+<button onclick="ask()">질문하기</button>
+<div id="chat"></div>
+</div>
+</div>
+
+<script>
+let sites=[], history=[], initialContext='';
+const $=id=>document.getElementById(id);
+function addSite(address='', area=''){const id=Date.now()+Math.random();sites.push({id,address,area});renderSites()}
+function removeSite(id){sites=sites.filter(s=>s.id!==id);renderSites()}
+function renderSites(){$('sites').innerHTML=sites.map((s,i)=>`<div class="site"><div class="site-head"><span>📍 대지 ${i+1}</span>${sites.length>1?`<button class="red" onclick="removeSite(${s.id})">삭제</button>`:''}</div><label>대지 주소</label><input data-id="${s.id}" data-k="address" value="${esc(s.address)}" placeholder="예: 대구광역시 북구 공항로5길 6"><label>대지면적 / 계획 연면적</label><input data-id="${s.id}" data-k="area" value="${esc(s.area)}" placeholder="예: 대지 300㎡ / 연면적 900㎡"></div>`).join('')}
+function syncSites(){document.querySelectorAll('[data-id]').forEach(x=>{let s=sites.find(s=>String(s.id)===x.dataset.id);if(s)s[x.dataset.k]=x.value.trim()})}
+function esc(v){return String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function basePrompt(){syncSites();return `당신은 대한민국 건축 인허가 초기검토를 돕는 전문 AI입니다.
+프로젝트 용도/규모: ${$('usage').value}
+관할 지자체: ${$('region').value||'주소로 판단하되 모르면 확인 필요로 표시'}
+대지 정보:
+${sites.map((s,i)=>`[대지 ${i+1}] 주소: ${s.address} / 면적·계획: ${s.area}`).join('\n')}
+
+건축법, 건축법 시행령·시행규칙, 소방 관련 법령, 전기·에너지 관련 기준, 조경 기준과 함께 해당 광역·기초지자체의 건축조례, 주차장조례, 도시계획조례, 조경·공원녹지 관련 조례 및 지구단위계획을 검토하라.
+답변 형식:
+1. 핵심 결론
+2. 국가 법령 근거
+3. 광역·기초지자체 조례 근거(조례명/조문은 확실할 때만, 불확실하면 공식 확인 필요)
+4. 분야별 검토(건축·주차·소방·전기·조경·환경)
+5. 담당 기관/부서(연락처는 추정 금지)
+6. 추가 확인 체크리스트
+확인할 수 없는 용도지역, 수치, 조례 조문, 전화번호는 추정하지 말고 '공식 확인 필요'라고 표시하라. 법률·인허가 확정 판단이 아닌 설계 초기 참고자료라고 명시하라.`}
+async function callGemini(contents){let key=$('apiKey').value.trim();if(!key)throw Error('Gemini API 키를 입력해 주세요.');let model='gemini-2.0-flash';let url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;let r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents,generationConfig:{temperature:.2,maxOutputTokens:5000}})});let d=await r.json();if(!r.ok)throw Error(d.error?.message||'API 오류');return d.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'응답이 없습니다.'}
+async function review(){let b=$('result');b.textContent='법령과 조례 검토 중입니다...';try{let prompt=basePrompt();let ans=await callGemini([{role:'user',parts:[{text:prompt}]}]);b.textContent=ans;initialContext=prompt+'\\n\\n[초기 검토 결과]\\n'+ans;history=[{role:'user',parts:[{text:prompt}]},{role:'model',parts:[{text:ans}]}];$('chatCard').style.display='block';$('chat').innerHTML=''}catch(e){b.textContent='오류: '+e.message}}
+async function ask(){let q=$('question').value.trim();if(!q)return alert('질문을 입력해 주세요.');let box=$('chat');box.insertAdjacentHTML('beforeend',`<div class="chat-item"><div class="q">질문: ${esc(q)}</div><div class="a">답변 생성 중...</div></div>`);let item=box.lastElementChild;try{let ans=await callGemini([...history,{role:'user',parts:[{text:`앞선 프로젝트 및 검토 결과를 참고해 답변하라.\\n${initialContext}\\n\\n추가 질문: ${q}\\n조례와 법령을 구분하고, 근거가 불확실하면 공식 확인 필요라고 표시하라.`}]}]);item.querySelector('.a').textContent=ans;history.push({role:'user',parts:[{text:q}]},{role:'model',parts:[{text:ans}]});$('question').value=''}catch(e){item.querySelector('.a').textContent='오류: '+e.message}}
+function memo(){syncSites();let chats=[...document.querySelectorAll('.chat-item')].map(x=>x.innerText).join('\\n\\n');return `건축 인허가 법규 AI 검토 메모\\n기준일: ${new Date().toLocaleString('ko-KR')}\\n\\n[프로젝트]\\n용도·규모: ${$('usage').value}\\n관할 지자체: ${$('region').value}\\n대지:\\n${sites.map((s,i)=>`${i+1}. ${s.address} / ${s.area}`).join('\\n')}\\n\\n[초기 검토 결과]\\n${$('result').innerText}\\n\\n[추가 질의응답]\\n${chats}\\n\\n※ 설계 초기 참고자료이며 최종 판단은 공식 법령·조례 및 관할 기관 확인 필요.`}
+async function copyMemo(){try{await navigator.clipboard.writeText(memo());alert('메모를 복사했습니다. GitHub 파일이나 자기소개서 초안에 붙여넣을 수 있습니다.')}catch(e){alert('복사에 실패했습니다. 브라우저 권한을 확인해 주세요.')}}
+function downloadMemo(){let blob=new Blob([memo()],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='건축법규검토메모.txt';a.click();URL.revokeObjectURL(a.href)}
+function clearAll(){if(confirm('입력과 결과를 모두 지울까요?'))location.reload()}
+addSite('대구광역시 북구 공항로5길 6','미정 / 지상 3층');
+addSite('대구 북구 공항로 31','미정 / 지상 3층');
+</script>
+</body></html>
